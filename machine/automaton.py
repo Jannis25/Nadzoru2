@@ -12,8 +12,7 @@ from random import randint
 from enum import Enum
 from xml.dom.minidom import parse
 import re
-import machine.exceptions as expt
-from machine.exceptions import ErrorMultiplePropertiesForEventName
+from .exceptions import ErrorMultiplePropertiesForEventName, NoInitialStateError, TooFewArgumentsError # relative import to allow this to work in external projects
 
 cur_path = os.path.realpath(__file__)
 base_path = os.path.dirname(os.path.dirname(cur_path))
@@ -806,6 +805,47 @@ class Automaton(Base):
         return self
 
 
+    def json_import(self, json_data):
+        """
+        Import an automaton from a JSON data structure.
+        The JSON data should be structured as follows:
+        {
+            "states": [
+                {"id": <int>, "name": <string>, "marked": <boolean>, "initial": <boolean>},
+            ],
+            "events": [
+                {"id": <int>, "name": <string>, "observable": <boolean>, "controllable": <boolean>},
+            ],
+            "transitions": [
+                {"source": <int>, "target": <int>, "event": <int>},
+            ]
+        }
+        """
+        self.set_file_path_name(None)
+
+        states = json_data.get('states', [])
+        events = json_data.get('events', [])
+        transitions = json_data.get('transitions', [])
+
+        event2id_map = dict()
+        state2id_map = dict()
+
+        for state_data in states:
+            state = self.state_add(state_data['name'], marked=state_data.get('marked', False), initial=state_data.get('initial', False))
+            state2id_map[state_data['id']] = state
+
+        for event_data in events:
+            event = self.event_add(event_data['name'], observable=event_data.get('observable', False), controllable=event_data.get('controllable', False))
+            event2id_map[event_data['id']] = event
+
+        for transition in transitions:
+            source_state = state2id_map[transition['source']]
+            target_state = state2id_map[transition['target']]
+            event = event2id_map[transition['event']]
+            self.transition_add(source_state, target_state, event)
+
+        return self
+
     def ides_import(self, file_path_name, load_layout=True):
         self.set_file_path_name(None)  # check rule
 
@@ -1302,11 +1342,11 @@ class Automaton(Base):
             states and then calculate the accessible part, we only add accessible states to the output."""
 
         if len(args) < 2:
-            raise expt.TooFewArgumentsError
+            raise TooFewArgumentsError
 
         is_equivalent, eq_events = args[0].check_equivalent_events(*args)
         if is_equivalent is not True:
-            raise expt.ErrorMultiplePropetiesForEventName(*eq_events)
+            raise ErrorMultiplePropertiesForEventName(*eq_events)
 
         G = args[0].__class__()  # function output
 
@@ -1341,7 +1381,7 @@ class Automaton(Base):
         if None in init_state_tuple:
             automatons_without_initial = list(map(lambda automaton: automaton.get_name(),
                                                   filter(lambda automaton: automaton.initial_state is None, args)))
-            raise expt.NoInitialStateError(*automatons_without_initial)
+            raise NoInitialStateError(*automatons_without_initial)
 
         G_state_add(init_state_tuple, True)
         while len(state_stack) != 0:
@@ -1377,7 +1417,7 @@ class Automaton(Base):
     def univocal(G, R, return_status=False):
         equivalent_events, event_map = G.check_equivalent_event_set(R)
         if not equivalent_events:
-            raise expt.ErrorMultiplePropetiesForEventName # TODO: custom error that can be catch by application
+            raise ErrorMultiplePropertiesForEventName # TODO: custom error that can be catch by application
 
         univocal_map = {R.initial_state: G.initial_state} # [state in R] to [state in G]
         state_stack = [(R.initial_state, G.initial_state)]
@@ -2019,7 +2059,7 @@ class Automaton(Base):
     def observer(self):
 
         if self.initial_state is None:
-            raise expt.NoInitialStateError(self.get_name())
+            raise NoInitialStateError(self.get_name())
 
         observer = Automaton()
         observer_event_dict = dict()
