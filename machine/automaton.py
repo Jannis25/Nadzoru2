@@ -591,6 +591,7 @@ class Automaton(Base):
 
         for event_a, event_b in event_map.items():
             if not event_a.equivalent_properties(event_b):
+                print(f'Event properties not equivalent for events {event_a.name} and {event_b.name}')
                 return False, None
 
         return True, event_map
@@ -845,6 +846,62 @@ class Automaton(Base):
             self.transition_add(source_state, target_state, event)
 
         return self
+
+    def json_export(self):
+        """
+        Export the automaton to a JSON data structure.
+        The output JSON data will be structured as follows:
+        {
+            "states": [
+                {"id": <int>, "name": <string>, "marked": <boolean>, "initial": <boolean>},
+            ],
+            "events": [
+                {"id": <int>, "name": <string>, "observable": <boolean>, "controllable": <boolean>},
+            ],
+            "transitions": [
+                {"source": <int>, "target": <int>, "event": <int>},
+            ]
+        }
+        """
+        json_data = {
+            "states": [],
+            "events": [],
+            "transitions": []
+        }
+
+        state_id_map = dict()
+        event_id_map = dict()
+
+        for state_id, state in enumerate(self.states):
+            state_id_map[state] = state_id
+            json_data["states"].append({
+                "id": state_id,
+                "name": state.name,
+                "marked": state.marked,
+                "initial": state == self.initial_state
+            })
+
+        for event_id, event in enumerate(self.events):
+            event_id_map[event] = event_id
+            json_data["events"].append({
+                "id": event_id,
+                "name": event.name,
+                "observable": event.observable,
+                "controllable": event.controllable
+            })
+
+        for source_state in self.states:
+            for transition in source_state.out_transitions:
+                source_state_id = state_id_map[transition.from_state]
+                target_state_id = state_id_map[transition.to_state]
+                event_id = event_id_map[transition.event]
+                json_data["transitions"].append({
+                    "source": source_state_id,
+                    "target": target_state_id,
+                    "event": event_id
+                })
+
+        return json_data
 
     def ides_import(self, file_path_name, load_layout=True):
         self.set_file_path_name(None)  # check rule
@@ -1330,7 +1387,7 @@ class Automaton(Base):
                     added_events.append(new_event)
                     event_names.add(g_event.name)
                 else:
-                    existing_event = self.get_event_by_name(g_event.name)
+                    existing_event = self.event_get_by_name(g_event.name)
                     if not events_equivalent(existing_event, g_event):
                         for ev in added_events:
                             self.events.remove(ev)
@@ -1467,12 +1524,20 @@ class Automaton(Base):
         states_to_be_visited_in_R = list()
         states_to_be_visited_in_R.append(sup.initial_state)
 
+        states_with_no_mapping = set()
         while flag_bad_state:
             flag_bad_state = False
             flag_end = True
             state_in_R = states_to_be_visited_in_R.pop()
 
             while flag_end:
+                if univ_map[state_in_R] is None:
+                    states_with_no_mapping.add(state_in_R)
+                    try:
+                        state_in_R = states_to_be_visited_in_R.pop()
+                    except IndexError:
+                        flag_end = False
+                    continue
                 for g_transition in univ_map[state_in_R].out_transitions:
                     r_event_set = set()
 
@@ -1501,7 +1566,7 @@ class Automaton(Base):
                 flag_bad_state = False
 
         sup.trim()
-
+        print(states_with_no_mapping)
         return sup
 
     def choice_problem_check(self):

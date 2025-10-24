@@ -1,3 +1,4 @@
+import os
 from jinja2 import Environment, FileSystemLoader, meta
 import math
 
@@ -5,10 +6,13 @@ import math
 
 class BaseGenerator():
     template_path = 'codegen/templates'
-    def __init__(self, *args, **kwargs):
+    def __init__(self, base_dir=None,*args, **kwargs):
         self.options = dict()
         self.device = None
-        loader = FileSystemLoader(self.template_path)
+        if base_dir is None:
+            base_dir = os.getcwd()
+        path = os.path.join(base_dir, self.template_path)
+        loader = FileSystemLoader(path)
         self.environment = Environment(loader=loader)
 
     def show(self):
@@ -41,13 +45,14 @@ class BaseGenerator():
                 out_path = f'codegen/output/{tmplt_name}'
             else:
                 out_path = f'{output_path}/{tmplt_name}'
-            
+
             tmplt_vars = self.get_template_variables(tmplt_name)
             vars_to_render = {key: arguments[key] for key in arguments.keys() & tmplt_vars}
             vars_to_render['generator'] = self
 
             template = self.environment.get_template(tmplt_name)
             render = template.render(**vars_to_render)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
             with open(out_path, 'w') as out_file:
                 out_file.write(render)
 
@@ -59,8 +64,8 @@ class BaseGenerator():
 class GenericMcu(BaseGenerator):
     templates_name = ['generic_mic.h']
     template_path = 'codegen/templates'
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super().__init__(base_dir=base_dir, *args, **kwargs)
         self.set_template_path(self.template_path)
 
     def generate_sup(self, automaton_list):
@@ -110,8 +115,8 @@ class ArduinoGenerator(GenericMcu):
     templates_name = ['arduino.ino', 'arduino.h']
     template_path = 'codegen/templates'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super().__init__(base_dir=base_dir, *args, **kwargs)
         self.set_device('arduino')
 
         self.set_template_path(self.template_path) 
@@ -205,8 +210,8 @@ class KilobotGenerator(GenericMcu):
     templates_name = ['kilobotAtmega328.c']
     template_path = 'codegen/templates'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super().__init__(base_dir=base_dir, *args, **kwargs)
         self.set_device('kilobot')
         self.set_template_path(self.template_path) 
 
@@ -270,8 +275,8 @@ class CGenerator(GenericMcu):
     templates_name = ['generic_mic.c', 'generic_mic.h']
     template_path = 'codegen/templates'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super().__init__(base_dir=base_dir, *args, **kwargs)
         self.set_device('C')
         self.set_template_path(self.template_path) 
 
@@ -335,8 +340,8 @@ class CPPGenerator(GenericMcu):
     templates_name = ['supervisor.yaml', 'sct.cpp', 'sct.h']
     template_path = 'codegen/templates'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super().__init__(base_dir=base_dir, *args, **kwargs)
         self.set_device('C')
         self.set_template_path(self.template_path) 
 
@@ -405,8 +410,8 @@ class PythonGenerator(GenericMcu):
     templates_name = ['supervisor.yaml', 'sct.py']
     template_path = 'codegen/templates'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super().__init__(base_dir=base_dir, *args, **kwargs)
         self.set_device('Python')
         self.set_template_path(self.template_path) 
 
@@ -453,7 +458,7 @@ class PythonGenerator(GenericMcu):
 
         return (data, data_pos, state_map, events, event_map, initial_state)
 
-    def write(self, automatons, vars_dict, output_path):
+    def write(self, automatons, vars_dict, output_path=None):
         output_dict = self.generate_strings(automatons)
         output_dict.update(vars_dict)
         self._write(output_path, output_dict)
